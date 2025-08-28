@@ -8,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <map>
 #include <iostream>
 #include <thread>
 // 线程池支持的模式
@@ -146,14 +147,18 @@ private:
 class Thread
 {
 public:
-    using ThreadFunc = std::function<void()>;
+    using ThreadFunc = std::function<void(size_t)>;
 
     Thread(ThreadFunc func);
     ~Thread();
     void start();
 
+    // 获取线程ID
+    size_t getId() const;
 private:
     ThreadFunc func_;
+    static size_t generateId_;
+    size_t threadId_;
 };
 
 /*
@@ -177,6 +182,7 @@ public:
     void start(size_t initThreadSize = 4);
     void setMode(PoolMode mode);
     void setTaskQueMaxTreshHold(size_t threshhold);
+    void setThreadSizeTreshHold(size_t threshhold);
     Result submitTask(std::shared_ptr<Task> sp);
 
     ThreadPool(const ThreadPool&) = delete;
@@ -184,19 +190,28 @@ public:
 
 private:
     // 定义线程函数
-    void  threadFunc();
+    void  threadFunc(size_t threadid);
+    // 检查pool的运行状态
+    bool checkRunningState() const;
 private:
-    std::vector<std::unique_ptr<Thread>> threads_; // 使用智能指针，避免内存泄漏
-    size_t initThreadSize_;
+    // std::vector<std::unique_ptr<Thread>> threads_; // 线程列表
+    std::unordered_map<size_t, std::unique_ptr<Thread>> threads_;
+    size_t initThreadSize_;                        // 初始线程数量
+    size_t threadSizeThreshHold_;                  // 线程数量上限阈值
+    std::atomic_int curThreadSize_;                // 记录线程池里面线程的总数量
+    std::atomic_int idleThreadSize_;               // 记录空闲线程的数量
 
     std::queue<std::shared_ptr<Task>> taskQue_;
-    std::atomic_int taskSize_; //任务数量
+    std::atomic_int taskSize_;    // 任务数量
     size_t taskQueMaxThreshHold_; // 任务队列数量上限阈值
 
-    std::mutex taskQueMtx_;
+    std::mutex taskQueMtx_; // 保证任务队列的线程安全
     std::condition_variable notFull_;
     std::condition_variable notEmpty_;
     PoolMode poolMode_;
+
+    // 表示当前线程池的启动状态
+    std::atomic_bool isPoolRunning_;
 };
 
 #endif
